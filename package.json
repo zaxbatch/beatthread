@@ -1,0 +1,17 @@
+{
+  "name": "beatthread",
+  "version": "1.0.0",
+  "description": "Reddit-style community app for beat producers — post beats, cover them, vote on the best version.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "serverless-http": "^3.2.0",
+    "@netlify/blobs": "^8.1.0"
+  }
+}

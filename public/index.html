@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BeatThread</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Auth screen -->
+  <div id="authScreen" class="auth-screen hidden">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span class="brand-icon">🎧</span>
+        <span id="authBrandName">BeatThread</span>
+      </div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-tab="login">Log in</button>
+        <button class="auth-tab" data-auth-tab="register">Create account</button>
+      </div>
+      <form id="authForm" class="auth-body"></form>
+      <p id="authHint" class="auth-hint hidden"></p>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="appShell" class="hidden">
+    <header class="topbar">
+      <div class="brand" id="appBrand">
+        <span class="brand-icon">🎧</span>
+        <span id="appBrandName">BeatThread</span>
+      </div>
+      <nav class="topnav">
+        <button class="nav-btn active" data-view="feed">Feed</button>
+        <button class="nav-btn hidden" id="adminNavBtn" data-view="admin">Admin</button>
+      </nav>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm hidden" id="newBeatBtn">+ Post a beat</button>
+        <div class="user-box">
+          <span class="user-name" id="userName"></span>
+          <button class="btn btn-ghost btn-sm" id="logoutBtn">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="view" class="view"></section>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle"></h3>
+        <button id="modalClose" class="btn btn-ghost">✕</button>
+      </div>
+      <form id="modalForm" class="modal-body"></form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
