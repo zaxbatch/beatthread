@@ -3,65 +3,296 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BeatThread</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>BeatThread — You're the star. Your beats take the stage.</title>
+  <meta name="description" content="The community feed where beat makers drop tracks, upload versions, and let the crowd crown the best one. Free to start — no credit card." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>" />
+  <link rel="stylesheet" href="landing.css" />
+  <style id="themeCss"></style>
 </head>
 <body>
-  <!-- Auth screen -->
-  <div id="authScreen" class="auth-screen hidden">
-    <div class="auth-card">
-      <div class="auth-brand">
-        <span class="brand-icon">🎧</span>
-        <span id="authBrandName">BeatThread</span>
-      </div>
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-auth-tab="login">Log in</button>
-        <button class="auth-tab" data-auth-tab="register">Create account</button>
-      </div>
-      <form id="authForm" class="auth-body"></form>
-      <p id="authHint" class="auth-hint hidden"></p>
-    </div>
-  </div>
 
-  <!-- App -->
-  <div id="appShell" class="hidden">
-    <header class="topbar">
-      <div class="brand" id="appBrand">
-        <span class="brand-icon">🎧</span>
-        <span id="appBrandName">BeatThread</span>
-      </div>
-      <nav class="topnav">
-        <button class="nav-btn active" data-view="feed">Feed</button>
-        <button class="nav-btn hidden" id="adminNavBtn" data-view="admin">Admin</button>
-      </nav>
-      <div class="topbar-right">
-        <button class="btn btn-primary btn-sm hidden" id="newBeatBtn">+ Post a beat</button>
-        <div class="user-box">
-          <span class="user-name" id="userName"></span>
-          <button class="btn btn-ghost btn-sm" id="logoutBtn">Log out</button>
+  <!-- ============ Nav ============ -->
+  <header class="lp-nav">
+    <a class="lp-brand" href="/">
+      <img class="hidden" data-logo src="" alt="logo" />
+      <span class="lp-brand-icon" data-logo-fallback>🎧</span>
+      <span data-name>BeatThread</span>
+    </a>
+    <nav class="lp-nav-links" id="lpMenuLinks">
+      <a class="lp-nav-link" href="#what">Features</a>
+      <a class="lp-nav-link" href="#how">How it works</a>
+      <a class="lp-nav-link" href="#pricing">Pricing</a>
+      <a class="lp-nav-link" href="#who">Who it's for</a>
+    </nav>
+    <div class="lp-nav-right">
+      <a class="btn btn-ghost btn-sm" href="app.html">Log in</a>
+      <a class="btn btn-primary btn-sm" href="app.html?register=1">Get started</a>
+    </div>
+  </header>
+
+  <!-- ============ Hero ============ -->
+  <section class="lp-hero">
+    <div class="lp-hero-inner">
+      <div>
+        <span class="lp-badge">🎧 The community for beat makers</span>
+        <h1>You're the star.<br />Your beats <span class="grad">take the stage.</span></h1>
+        <p class="lp-hero-sub" data-tagline>
+          BeatThread is where producers drop beats, upload versions and mixes, and let the
+          crowd vote, comment, and crown the best one — with a player as cool as your music.
+        </p>
+        <div class="lp-hero-ctas">
+          <a class="btn btn-primary" href="app.html?register=1">Start for free</a>
+          <a class="btn btn-ghost" href="#how">See how it works</a>
+        </div>
+        <div class="lp-hero-chips">
+          <span>No credit card</span>
+          <span>Start in 60 seconds</span>
+          <span>Embed anywhere</span>
         </div>
       </div>
-    </header>
 
-    <main class="main">
-      <section id="view" class="view"></section>
-    </main>
-  </div>
-
-  <!-- Modal -->
-  <div id="modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3 id="modalTitle"></h3>
-        <button id="modalClose" class="btn btn-ghost">✕</button>
+      <!-- Animated player mockup -->
+      <div class="hero-player">
+        <div class="hp-canvas">
+          <div class="eq" id="heroEq">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+        <div class="hp-controls">
+          <button class="hp-play" id="heroPlay" aria-label="Play">▶</button>
+          <span class="hp-time" id="heroTime">0:00 / 2:47</span>
+          <div class="hp-seek"><div class="hp-seek-fill"></div></div>
+          <span class="hp-mode">waveform</span>
+        </div>
+        <div class="hp-track">
+          <div class="hp-cover"></div>
+          <div>
+            <b>Midnight Run (prod. by the crowd)</b>
+            <span>↻ 42 versions · 1.2k votes · #1 this week</span>
+          </div>
+        </div>
       </div>
-      <form id="modalForm" class="modal-body"></form>
     </div>
-  </div>
+  </section>
 
-  <div id="toast" class="toast hidden"></div>
+  <!-- ============ What it is ============ -->
+  <section class="lp-section" id="what">
+    <div class="lp-inner">
+      <div class="lp-kicker">What is BeatThread?</div>
+      <h2>More than a playlist. A stage.</h2>
+      <p class="lp-lede">
+        Every beat you post becomes a thread of versions and mixes. The crowd listens,
+        votes, and comments — and the best take rises to the top.
+      </p>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="ic">🧵</span>
+          <h3>Threads, not just posts</h3>
+          <p>Every beat is a thread. Upload versions and mixes as you refine — each one gets its own place, its own votes, its own moment.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">🎛️</span>
+          <h3>A player worth watching</h3>
+          <p>Waveform, EQ, and orbit visualizers with play, pause, seek, and timecode. A player that looks as good as your music sounds.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">🏆</span>
+          <h3>Leaderboards &amp; clout</h3>
+          <p>Producers rank by votes, contributors by activity. Drop more, engage more, climb higher — the crowd keeps score.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">📦</span>
+          <h3>Embed anywhere</h3>
+          <p>Drop the player into your website, your link-in-bio, anywhere a beat should play. One line of code, your branding.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <script src="player.js"></script>
-  <script src="app.js"></script>
+  <!-- ============ How it works ============ -->
+  <section class="lp-section lp-alt" id="how">
+    <div class="lp-inner">
+      <div class="lp-kicker">How it works</div>
+      <h2>On stage in three steps</h2>
+      <p class="lp-lede">From first upload to a crowd of fans in minutes.</p>
+      <div class="lp-steps">
+        <div class="lp-step">
+          <h3>Create your account</h3>
+          <p>Free Starter plan, no credit card. Log in and claim your producer name.</p>
+        </div>
+        <div class="lp-step">
+          <h3>Post your beat</h3>
+          <p>Upload audio and cover art, then add versions as you refine. Each version gets its own entry in the thread.</p>
+        </div>
+        <div class="lp-step">
+          <h3>Build your crowd</h3>
+          <p>Fans vote, comment, and share. Climb the leaderboard, then embed the player anywhere your music lives.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Pricing ============ -->
+  <section class="lp-section" id="pricing">
+    <div class="lp-inner">
+      <div class="lp-kicker">Pricing</div>
+      <h2>Simple pricing that scales with you</h2>
+      <p class="lp-lede">Start free and upgrade when your stage gets bigger. Every plan includes secure accounts and JWT login.</p>
+      <div class="lp-plans">
+        <div class="lp-plan">
+          <h3>Starter</h3>
+          <div class="tagline">Start the party</div>
+          <div class="price">$0 <small>/ month</small></div>
+          <ul>
+            <li>Community feed &amp; voting</li>
+            <li>Waveform player</li>
+            <li>3 beats, 5 versions per beat</li>
+            <li>Built-in themes</li>
+            <li>Your branding on the stage</li>
+          </ul>
+          <a class="btn btn-ghost" href="app.html?register=1">Start free</a>
+        </div>
+        <div class="lp-plan pop">
+          <span class="pop-tag">Most popular</span>
+          <h3>Pro</h3>
+          <div class="tagline">Go unlimited</div>
+          <div class="price">$19 <small>/ month</small></div>
+          <ul>
+            <li>Everything in Starter</li>
+            <li>Unlimited beats &amp; versions</li>
+            <li>Full player: waveform · EQ · orbit</li>
+            <li>Downloads for your fans</li>
+            <li>Custom menu links</li>
+            <li>Upload custom themes</li>
+          </ul>
+          <a class="btn btn-primary" href="app.html?register=1">Get Pro</a>
+        </div>
+        <div class="lp-plan">
+          <h3>Business</h3>
+          <div class="tagline">Run your own label</div>
+          <div class="price">$49 <small>/ month</small></div>
+          <ul>
+            <li>Everything in Pro</li>
+            <li>White-label — strip BeatThread branding</li>
+            <li>Unlimited menu links</li>
+            <li>Subscriber management</li>
+            <li>Priority support</li>
+          </ul>
+          <a class="btn btn-ghost" href="app.html?register=1">Go Business</a>
+        </div>
+      </div>
+      <p class="lp-price-note">Prices in USD. Change or cancel your plan anytime.</p>
+    </div>
+  </section>
+
+  <!-- ============ Who it's for ============ -->
+  <section class="lp-section lp-alt" id="who">
+    <div class="lp-inner">
+      <div class="lp-kicker">Who it's for</div>
+      <h2>Built for everyone with a beat to drop</h2>
+      <p class="lp-lede">However you make or move music, there's a place for you on the stage.</p>
+      <div class="lp-grid">
+        <div class="lp-card">
+          <span class="ic">🎤</span>
+          <h3>Producers &amp; beat makers</h3>
+          <p>Drop your beats, get real feedback, and keep refining versions until the crowd crowns your best work. Build a fanbase that follows every drop.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">🏷️</span>
+          <h3>Collectives &amp; labels</h3>
+          <p>Run the feed for your whole roster. Members upload tracks, the community votes on what gets released, and Business white-label makes it fully yours.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">📺</span>
+          <h3>Creators &amp; DJs</h3>
+          <p>Embed the player on your channel, site, or link-in-bio. Let viewers vote on the next track without ever leaving your page.</p>
+        </div>
+        <div class="lp-card">
+          <span class="ic">🎓</span>
+          <h3>Teachers &amp; battle hosts</h3>
+          <p>Host beat battles and themed challenges. Students submit versions, comment, and climb the leaderboard — competition made fun and fair.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="lp-cta">
+    <h2>Ready to drop your first beat?</h2>
+    <p>Free to start. No credit card. Your stage is waiting.</p>
+    <a class="btn btn-primary" href="app.html?register=1">Start for free</a>
+  </section>
+
+  <!-- ============ Footer ============ -->
+  <footer class="lp-foot">
+    <div class="lp-foot-inner">
+      <a class="lp-brand" href="/">
+        <img class="hidden" data-logo src="" alt="logo" />
+        <span class="lp-brand-icon" data-logo-fallback>🎧</span>
+        <span data-name>BeatThread</span>
+      </a>
+      <nav class="lp-foot-links">
+        <a href="#what">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#who">Who it's for</a>
+        <a href="app.html">Open the app</a>
+      </nav>
+      <p class="lp-foot-note">© <span id="year">2025</span> <span data-name>BeatThread</span> · Powered by BeatThread · You're the star.</p>
+    </div>
+  </footer>
+
+  <script>
+    /* Inherit the install's branding: name, tagline, color, logo, theme, menu links. */
+    (function () {
+      fetch('/api/settings')
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (!s || typeof s !== 'object') return;
+          if (s.siteName) document.querySelectorAll('[data-name]').forEach(function (el) { el.textContent = s.siteName; });
+          if (s.tagline) {
+            var t = document.querySelector('[data-tagline]');
+            if (t) t.textContent = s.tagline;
+          }
+          if (s.primaryColor) {
+            document.documentElement.style.setProperty('--primary', s.primaryColor);
+            document.documentElement.style.setProperty('--primary-dark', s.primaryColor);
+          }
+          if (s.logoUrl) {
+            document.querySelectorAll('[data-logo]').forEach(function (img) {
+              img.src = s.logoUrl;
+              img.classList.remove('hidden');
+            });
+            document.querySelectorAll('[data-logo-fallback]').forEach(function (el) { el.classList.add('hidden'); });
+          }
+          if (s.theme && s.theme.css) {
+            document.getElementById('themeCss').textContent = s.theme.css;
+          }
+          var menuBox = document.getElementById('lpMenuLinks');
+          (s.menu || []).filter(function (m) { return m.label && m.href; }).forEach(function (m) {
+            var a = document.createElement('a');
+            a.className = 'lp-nav-link';
+            a.href = m.href;
+            if (m.target === '_blank') { a.target = '_blank'; a.rel = 'noopener'; }
+            a.textContent = m.label;
+            menuBox.appendChild(a);
+          });
+        })
+        .catch(function () { /* static fallback branding is fine */ });
+
+      /* Play/pause the hero mockup */
+      var play = document.getElementById('heroPlay');
+      var eq = document.getElementById('heroEq');
+      play.addEventListener('click', function () {
+        var playing = play.dataset.playing !== '1';
+        play.dataset.playing = playing ? '1' : '0';
+        play.textContent = playing ? '⏸' : '▶';
+        eq.classList.toggle('paused', !playing);
+      });
+
+      document.getElementById('year').textContent = new Date().getFullYear();
+    })();
+  </script>
 </body>
 </html>

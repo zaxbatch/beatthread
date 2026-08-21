@@ -921,13 +921,14 @@ async function loadSettings() {
 
 async function init() {
   await loadSettings();
-  document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.view)));
+  document.querySelectorAll('.nav-btn').forEach((b) => {
+    if (b.dataset.view) b.addEventListener('click', () => navigate(b.dataset.view));
+  });
   $('#newBeatBtn').addEventListener('click', () => uploadModal('beat'));
   $('#logoutBtn').addEventListener('click', async () => {
     try { await api('POST', '/api/auth/logout'); } catch { /* ignore */ }
     clearSession();
-    toast('Logged out');
-    showAuthScreen();
+    window.location.href = '/';
   });
   document.querySelectorAll('.auth-tab').forEach((t) => t.addEventListener('click', () => setAuthMode(t.dataset.authTab)));
   $('#authForm').addEventListener('submit', submitAuth);
@@ -949,6 +950,8 @@ async function init() {
   }
   clearSession();
   showAuthScreen();
+  // Landing page can deep-link to the register tab via app.html?register=1.
+  if (new URLSearchParams(location.search).get('register') === '1') setAuthMode('register');
 }
 
 init();
