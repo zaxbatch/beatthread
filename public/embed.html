@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BeatThread player</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Embed-friendly: transparent background, no page chrome */
+    body { background: transparent; padding: 0; min-height: auto; }
+    .embed-wrap { padding: 4px; }
+    .embed-head { font-size: 14px; margin-bottom: 6px; }
+    .embed-foot { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="embed-wrap">
+    <div class="embed-head" id="embedHead"></div>
+    <div class="bp-mount" id="embedMount"></div>
+    <div class="embed-foot" id="embedFoot"></div>
+  </div>
+  <style id="themeCss"></style>
+
+  <script src="player.js"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var head = document.getElementById('embedHead');
+      var mount = document.getElementById('embedMount');
+      var foot = document.getElementById('embedFoot');
+
+      // Inherit the site's active theme.
+      fetch('/api/settings').then(function (r) { return r.json(); }).then(function (s) {
+        if (s && s.theme && s.theme.css) document.getElementById('themeCss').textContent = s.theme.css;
+      }).catch(function () {});
+
+      function clean(str) { return String(str || '').replace(/[<>&"']/g, ''); }
+
+      function loadFrom(audioUrl, title) {
+        head.innerHTML = title ? '<b>' + clean(title) + '</b>' : '';
+        window.BeatPlayer.mount(mount, { url: audioUrl, modes: ['waveform', 'eq', 'orbit'] });
+      }
+
+      var versionId = params.get('version');
+      var audio = params.get('audio');
+      if (versionId) {
+        fetch('/api/beats/versions/' + encodeURIComponent(versionId))
+          .then(function (r) { return r.json(); })
+          .then(function (v) {
+            if (v && v.audioUrl) {
+              loadFrom(v.audioUrl, v.title);
+              foot.innerHTML = clean(v.beatTitle) + ' — by ' + clean(v.producerName);
+            } else {
+              head.innerHTML = '<span style="color:var(--danger)">Version not found</span>';
+            }
+          })
+          .catch(function () { head.innerHTML = '<span style="color:var(--danger)">Could not load version</span>'; });
+      } else if (audio) {
+        loadFrom(audio, params.get('title') || '');
+      } else {
+        head.innerHTML = '<span style="color:var(--muted)">Add ?version=ID or ?audio=URL to embed a player</span>';
+      }
+    })();
+  </script>
+</body>
+</html>

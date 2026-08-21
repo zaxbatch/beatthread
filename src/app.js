@@ -9,6 +9,8 @@ const beatsRouter = require('./routes/beats');
 const adminRouter = require('./routes/admin');
 const commentsRouter = require('./routes/comments');
 const leaderboardRouter = require('./routes/leaderboard');
+const superRouter = require('./routes/super');
+const { THEMES } = require('./themes');
 
 /**
  * Builds and configures the Express application.
@@ -41,6 +43,15 @@ function createApp(options = {}) {
   app.use('/api/admin', adminRouter(db));
   app.use('/api/comments', commentsRouter(db));
   app.use('/api/leaderboard', leaderboardRouter(db));
+  app.use('/api/super', superRouter(db));
+
+  // Public: built-in theme CSS (for the theme picker + embedders).
+  app.get('/api/themes/:name.css', (req, res) => {
+    const t = THEMES[req.params.name];
+    if (!t) return res.status(404).json({ error: 'Theme not found' });
+    res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    res.send(t.css);
+  });
 
   // Static frontend
   app.use(express.static(path.join(__dirname, '..', 'public')));

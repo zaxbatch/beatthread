@@ -68,6 +68,47 @@ function applyBranding() {
   $('#authBrandName').textContent = settings.siteName || 'BeatThread';
   $('#appBrandName').textContent = settings.siteName || 'BeatThread';
   document.title = settings.siteName || 'BeatThread';
+  // Apply the active theme CSS (built-in or admin-uploaded custom).
+  let st = document.getElementById('themeCss');
+  if (!st) { st = document.createElement('style'); st.id = 'themeCss'; document.head.appendChild(st); }
+  st.textContent = (settings.theme && settings.theme.css) || '';
+  renderNav();
+}
+
+/** Build the top nav: admin-configured menu links + Feed + Admin. */
+function renderNav() {
+  const nav = document.querySelector('.topnav');
+  if (!nav) return;
+  nav.querySelectorAll('[data-menu]').forEach((a) => a.remove());
+  const feedBtn = nav.querySelector('[data-view="feed"]');
+  const adminBtn = nav.querySelector('[data-view="admin"]');
+  (settings.menu || []).filter((m) => m.href && m.label).forEach((m) => {
+    const a = document.createElement('a');
+    a.className = 'nav-btn';
+    a.href = m.href;
+    a.target = m.target === '_blank' ? '_blank' : '_self';
+    if (m.target === '_blank') a.rel = 'noopener';
+    a.textContent = m.label;
+    a.dataset.menu = '1';
+    if (feedBtn) nav.insertBefore(a, feedBtn);
+    else nav.appendChild(a);
+  });
+  if (adminBtn) {
+    adminBtn.classList.toggle('hidden', !(currentUser && (currentUser.role === 'admin' || currentUser.role === 'super')));
+  }
+}
+
+/** Save a text blob as a download (themes, exports). */
+function downloadText(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ============================ Auth ============================ */
@@ -193,8 +234,8 @@ function showApp() {
   $('#authScreen').classList.add('hidden');
   $('#appShell').classList.remove('hidden');
   $('#userName').textContent = currentUser.name || currentUser.email;
-  $('#adminNavBtn').classList.toggle('hidden', currentUser.role !== 'admin');
-  $('#newBeatBtn').classList.toggle('hidden', settings.mode === 'solo' && currentUser.role !== 'admin');
+  $('#newBeatBtn').classList.toggle('hidden', settings.mode === 'solo' && currentUser.role === 'user');
+  renderNav();
   navigate('feed');
 }
 
@@ -337,9 +378,25 @@ async function renderThread(el) {
   el.querySelectorAll('[data-comments-for]').forEach((box) => loadComments(box.dataset.commentsFor, box));
   el.querySelectorAll('[data-comment-add]').forEach((b) => b.addEventListener('click', () => addComment(b.dataset.commentAdd)));
   el.querySelectorAll('[data-comment-del]').forEach((b) => b.addEventListener('click', () => deleteComment(b.dataset.commentDel, b)));
+  initPlayers(el);
+}
+
+/** Mount the cool player on every .bp-mount (waveform/EQ/orbit per plan). */
+function initPlayers(el) {
+  if (!window.BeatPlayer) return;
+  const modes = (settings.plan && settings.plan.limits.playerModes) || ['waveform'];
+  el.querySelectorAll('.bp-mount').forEach((m) => {
+    window.BeatPlayer.mount(m, {
+      url: m.dataset.audio,
+      modes,
+      onError: (msg) => toast(msg, true),
+    });
+  });
 }
 
 function versionHtml(v, isBest) {
+  const canDownload = (settings.plan && settings.plan.limits.download)
+    || (currentUser && (currentUser.role === 'admin' || currentUser.role === 'super'));
   return `
     <div class="version ${isBest ? 'best' : ''}">
       <div class="vote-col">
@@ -351,10 +408,10 @@ function versionHtml(v, isBest) {
         ${v.coverUrl ? `<img class="cover cover-md" src="${esc(v.coverUrl)}" alt="" />` : ''}
         <h4>${esc(v.title)} ${isBest ? '<span class="badge-best">★ best</span>' : ''} ${v.isOriginal ? '<span class="tag">original</span>' : ''}</h4>
         <div class="byline">by ${esc(v.producerName)} · ${fmtDate(v.createdAt)}</div>
-        <audio controls preload="none" src="${esc(v.audioUrl)}"></audio>
+        <div class="bp-mount" data-audio="${esc(v.audioUrl)}"></div>
         <div class="version-actions">
-          <a class="dl" href="${esc(v.audioUrl)}" download target="_blank" rel="noopener">⬇ Download</a>
-          ${currentUser && currentUser.role === 'admin' ? `<button class="btn btn-danger btn-sm" data-del-version="${esc(v.id)}">Delete</button>` : ''}
+          ${canDownload ? `<a class="dl" href="/api/beats/versions/${esc(v.id)}/download" download>⬇ Download</a>` : ''}
+          ${currentUser && (currentUser.role === 'admin' || currentUser.role === 'super') ? `<button class="btn btn-danger btn-sm" data-del-version="${esc(v.id)}">Delete</button>` : ''}
         </div>
         <div class="comments" data-comments-for="${esc(v.id)}">
           <div class="comments-list"><div class="muted">Loading comments…</div></div>
@@ -509,25 +566,37 @@ function uploadModal(kind) {
 
 let adminTab = 'branding';
 
+const ADMIN_TABS = [
+  ['branding', 'Branding'], ['menu', 'Menu'], ['themes', 'Themes'], ['storage', 'Storage'],
+  ['login', 'Login (JWT)'], ['plans', 'Plans'], ['moderation', 'Moderation'], ['users', 'Users'], ['embed', 'Embed'],
+];
+
 async function renderAdmin(el) {
   const adminData = await api('GET', '/api/admin/settings');
+  const isSuper = currentUser.role === 'super';
+  const plan = adminData.plan || { id: 'starter', name: 'Starter' };
   el.innerHTML = `
     <div class="panel">
       <div class="panel-head"><h2>Admin panel</h2></div>
       <div style="padding:16px 18px">
         <div class="tabs">
-          <button class="tab-btn ${adminTab === 'branding' ? 'active' : ''}" data-tab="branding">Branding &amp; mode</button>
-          <button class="tab-btn ${adminTab === 'storage' ? 'active' : ''}" data-tab="storage">Storage (Cloudinary)</button>
-          <button class="tab-btn ${adminTab === 'moderation' ? 'active' : ''}" data-tab="moderation">Moderation</button>
-          <button class="tab-btn ${adminTab === 'users' ? 'active' : ''}" data-tab="users">Users</button>
+          ${ADMIN_TABS.map(([id, label]) => `<button class="tab-btn ${adminTab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`).join('')}
         </div>
         <div id="adminBody"></div>
       </div>
     </div>`;
 
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { adminTab = b.dataset.tab; renderAdmin(el); }));
-
   const body = $('#adminBody');
+
+  const save = async (patch) => {
+    await api('PUT', '/api/admin/settings', patch);
+    toast('Saved');
+    await loadSettings();
+    applyBranding();
+    renderAdmin(el);
+  };
+
   if (adminTab === 'branding') {
     body.innerHTML = `
       <div class="form-grid">
@@ -542,35 +611,146 @@ async function renderAdmin(el) {
         <div class="full"><label>Logo URL (optional)</label><input id="aLogo" value="${esc(adminData.logoUrl || '')}" placeholder="https://…" /></div>
       </div>
       <div class="form-actions"><button class="btn btn-primary" id="saveBranding">Save branding</button></div>`;
-    $('#saveBranding').addEventListener('click', async () => {
-      try {
-        await api('PUT', '/api/admin/settings', {
-          siteName: $('#aSiteName').value, tagline: $('#aTagline').value,
-          mode: $('#aMode').value, primaryColor: $('#aColor').value, logoUrl: $('#aLogo').value
-        });
-        toast('Branding saved');
-        await loadSettings();
-        applyBranding();
-      } catch (err) { toast(err.message, true); }
+    $('#saveBranding').addEventListener('click', () => save({
+      siteName: $('#aSiteName').value, tagline: $('#aTagline').value,
+      mode: $('#aMode').value, primaryColor: $('#aColor').value, logoUrl: $('#aLogo').value,
+    }));
+  } else if (adminTab === 'menu') {
+    const menuLimit = (plan.limits && plan.limits.menuItems) || 0;
+    body.innerHTML = `
+      <p class="muted">Add links so the app matches your website/brand.${menuLimit === 'unlimited' ? '' : ` Your plan allows <b>${menuLimit}</b> menu item(s).`}</p>
+      <div id="menuRows"></div>
+      <div class="form-actions">
+        <button class="btn btn-ghost" id="menuAdd">+ Add item</button>
+        <button class="btn btn-primary" id="menuSave">Save menu</button>
+      </div>`;
+    const menu = (adminData.menu || []).slice();
+    const rows = $('#menuRows');
+    const renderRows = () => {
+      rows.innerHTML = menu.map((m, i) => `
+        <div class="menu-row">
+          <input data-mi-label="${i}" placeholder="Label (e.g. Store)" value="${esc(m.label)}" />
+          <input data-mi-href="${i}" placeholder="https://… or /page" value="${esc(m.href)}" />
+          <select class="m-target" data-mi-target="${i}">
+            <option value="_self" ${m.target !== '_blank' ? 'selected' : ''}>Same tab</option>
+            <option value="_blank" ${m.target === '_blank' ? 'selected' : ''}>New tab</option>
+          </select>
+          <button class="btn btn-danger btn-sm" data-mi-del="${i}">✕</button>
+        </div>`).join('') || '<div class="muted">No menu items yet — add your first link.</div>';
+      rows.querySelectorAll('[data-mi-del]').forEach((b) => b.addEventListener('click', () => { menu.splice(Number(b.dataset.miDel), 1); renderRows(); }));
+    };
+    renderRows();
+    $('#menuAdd').addEventListener('click', () => { menu.push({ label: '', href: '', target: '_self' }); renderRows(); });
+    $('#menuSave').addEventListener('click', async () => {
+      const cleaned = menu.map((_, i) => ({
+        label: rows.querySelector(`[data-mi-label="${i}"]`).value.trim(),
+        href: rows.querySelector(`[data-mi-href="${i}"]`).value.trim(),
+        target: rows.querySelector(`[data-mi-target="${i}"]`).value,
+      })).filter((m) => m.label && m.href);
+      await save({ menu: cleaned });
+    });
+  } else if (adminTab === 'themes') {
+    const themes = await api('GET', '/api/admin/themes');
+    const current = (adminData.theme && adminData.theme.name) || 'beatthread';
+    const customAllowed = Boolean(plan.limits && plan.limits.customThemes);
+    body.innerHTML = `
+      <p class="muted">Pick a built-in theme, or upload your own CSS${customAllowed ? '' : ' — custom themes are a <b>Pro</b> feature (upgrade in Plans).'}</p>
+      <div id="themeList"></div>
+      <div class="form-grid">
+        <div class="full"><label>Custom CSS <span class="opt">(choose a .css file or paste)</span></label>
+          <textarea id="themeCssInput" rows="6" placeholder=":root { --primary: #ff0000; } …" ${customAllowed ? '' : 'disabled'}></textarea></div>
+        <div class="full">
+          <input type="file" id="themeCssFile" accept=".css,text/css" class="hidden" />
+          <button class="btn btn-ghost" id="themePickFile" ${customAllowed ? '' : 'disabled'}>📁 Choose .css file</button>
+          <button class="btn btn-primary" id="themeApplyCustom" ${customAllowed ? '' : 'disabled'}>Apply custom CSS</button>
+          <button class="btn btn-ghost" id="themeReset">↺ Reset to default</button>
+        </div>
+        <div class="full">
+          <button class="btn btn-ghost" id="themeDownloadCurrent">⬇ Download current theme CSS</button>
+          <button class="btn btn-ghost" id="themeDownloadDefault">⬇ Download default CSS</button>
+        </div>
+      </div>`;
+    const list = $('#themeList');
+    list.innerHTML = themes.map((t) => `
+      <label class="theme-option ${current === t.name ? 'active' : ''}">
+        <input type="radio" name="theme" value="${esc(t.name)}" ${current === t.name ? 'checked' : ''} />
+        <span><b>${esc(t.label)}</b><p>${esc(t.description)}</p></span>
+      </label>`).join('');
+    list.querySelectorAll('input[name=theme]').forEach((r) => r.addEventListener('change', () => save({ theme: { name: r.value, css: '' } })));
+    $('#themePickFile').addEventListener('click', () => $('#themeCssFile').click());
+    $('#themeCssFile').addEventListener('change', async () => {
+      const f = $('#themeCssFile').files && $('#themeCssFile').files[0];
+      if (!f) return;
+      $('#themeCssInput').value = await f.text();
+      toast('CSS loaded — click “Apply custom CSS”');
+    });
+    $('#themeApplyCustom').addEventListener('click', async () => {
+      const css = $('#themeCssInput').value.trim();
+      if (!css) { toast('Paste or choose a CSS file first', true); return; }
+      await save({ theme: { name: 'custom', css } });
+    });
+    $('#themeReset').addEventListener('click', () => save({ theme: { name: 'beatthread', css: '' } }));
+    $('#themeDownloadCurrent').addEventListener('click', async () => {
+      const css = (settings.theme && settings.theme.css) || await (await fetch('/styles.css')).text();
+      downloadText(css, 'beatthread-current-theme.css');
+    });
+    $('#themeDownloadDefault').addEventListener('click', async () => {
+      const css = await (await fetch('/styles.css')).text();
+      downloadText(css, 'beatthread-default.css');
     });
   } else if (adminTab === 'storage') {
     const c = adminData.cloudinary || {};
     body.innerHTML = `
-      <p class="muted">Sign-ups upload audio directly to your Cloudinary account. Enter your Cloudinary credentials (Dashboard → API Keys).</p>
+      <p class="muted">Sign-ups upload audio directly to your Cloudinary account. Enter your Cloudinary credentials (Dashboard → API Keys) at setup — nothing is hardcoded.</p>
       <div class="form-grid">
         <div><label>Cloud name</label><input id="cCloud" value="${esc(c.cloudName || '')}" /></div>
         <div><label>API key</label><input id="cKey" value="${esc(c.apiKey || '')}" /></div>
         <div class="full"><label>API secret</label><input id="cSecret" type="password" value="${esc(c.apiSecret || '')}" /></div>
       </div>
       <div class="form-actions"><button class="btn btn-primary" id="saveStorage">Save storage settings</button></div>`;
-    $('#saveStorage').addEventListener('click', async () => {
-      try {
-        await api('PUT', '/api/admin/settings', {
-          cloudinary: { cloudName: $('#cCloud').value.trim(), apiKey: $('#cKey').value.trim(), apiSecret: $('#cSecret').value.trim() }
-        });
-        toast('Storage settings saved');
-      } catch (err) { toast(err.message, true); }
-    });
+    $('#saveStorage').addEventListener('click', () => save({
+      cloudinary: { cloudName: $('#cCloud').value.trim(), apiKey: $('#cKey').value.trim(), apiSecret: $('#cSecret').value.trim() },
+    }));
+  } else if (adminTab === 'login') {
+    if (!isSuper) {
+      body.innerHTML = '<div class="empty">Only the super user can configure JWT login.</div>';
+    } else {
+      body.innerHTML = `
+        <p class="muted">Set a shared secret so visitors to <b>your own website</b> can log in consistently with a JWT (HS256, <code>sub</code> = the user's email). They then call:</p>
+        <div class="embed-code">POST /api/auth/jwt&#10;{"token":"&lt;your HS256 JWT&gt;"}</div>
+        <div class="form-grid">
+          <div class="full"><label>JWT secret</label><input id="jwtSecret" type="password" value="${esc(adminData.jwtSecret || '')}" placeholder="A long random string" /></div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" id="saveJwt">Save secret</button></div>
+        <p class="muted" style="margin-top:10px">JWT login is a <b>Business</b> plan feature — the endpoint returns 400 when the secret is empty.</p>`;
+      $('#saveJwt').addEventListener('click', async () => {
+        await api('PUT', '/api/admin/settings', { jwtSecret: $('#jwtSecret').value.trim() });
+        toast('JWT secret saved');
+        renderAdmin(el);
+      });
+    }
+  } else if (adminTab === 'plans') {
+    const plans = await api('GET', '/api/admin/plans');
+    const currentPlan = plan.id || 'starter';
+    body.innerHTML = `
+      <p class="muted">${isSuper ? 'Choose the plan for this install — it gates end-user features (you always bypass limits).' : 'Your current plan:'} <b>${esc(plan.name || 'Starter')}</b></p>
+      <div class="plan-cards">
+        ${plans.map((p) => `
+          <div class="plan-card ${p.id === currentPlan ? 'active' : ''}">
+            <h4>${esc(p.name)}</h4>
+            <div class="price">${p.priceMonthly === 0 ? 'Free' : '$' + p.priceMonthly + '/mo'}</div>
+            <ul>
+              ${Object.entries(p.limits).map(([k, v]) => `<li>${esc(k)}: ${esc(v === true ? 'yes' : v === false ? 'no' : v)}</li>`).join('')}
+            </ul>
+            ${isSuper ? `<div style="margin-top:10px"><button class="btn btn-primary btn-sm" data-set-plan="${p.id}" ${p.id === currentPlan ? 'disabled' : ''}>${p.id === currentPlan ? 'Current' : 'Set plan'}</button></div>` : ''}
+          </div>`).join('')}
+      </div>`;
+    body.querySelectorAll('[data-set-plan]').forEach((b) => b.addEventListener('click', async () => {
+      await api('PUT', '/api/super/plan', { plan: b.dataset.setPlan });
+      toast('Plan set');
+      await loadSettings();
+      renderAdmin(el);
+    }));
   } else if (adminTab === 'moderation') {
     const beats = await api('GET', '/api/beats');
     body.innerHTML = `
@@ -585,36 +765,83 @@ async function renderAdmin(el) {
     body.querySelectorAll('[data-del-beat]').forEach((b) => b.addEventListener('click', () => adminDeleteBeat(b.dataset.delBeat)));
   } else if (adminTab === 'users') {
     const users = await api('GET', '/api/admin/users');
+    if (isSuper) {
+      body.innerHTML = `
+        <p class="muted">Manage subscribers and staff. Role hierarchy: <b>super</b> &gt; <b>admin</b> &gt; <b>user</b>. You are the owner.</p>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th></th></tr></thead>
+          <tbody>
+            ${users.map((u) => `
+              <tr>
+                <td>${esc(u.name)}</td>
+                <td>${esc(u.email)}</td>
+                <td>
+                  <select data-role-for="${esc(u.id)}" ${u.id === currentUser.id ? 'disabled' : ''}>
+                    ${['super', 'admin', 'user'].map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+                  </select>
+                </td>
+                <td>${fmtDate(u.createdAt)}</td>
+                <td class="row-actions">
+                  ${u.id !== currentUser.id ? `<button class="btn btn-danger btn-sm" data-super-del="${esc(u.id)}">Delete</button>` : ''}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+      body.querySelectorAll('[data-role-for]').forEach((sel) => sel.addEventListener('change', async () => {
+        try {
+          await api('PUT', `/api/super/users/${sel.dataset.roleFor}/role`, { role: sel.value });
+          toast('Role updated');
+        } catch (err) { toast(err.message, true); renderAdmin(el); }
+      }));
+      body.querySelectorAll('[data-super-del]').forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Delete this subscriber? Their beats, versions, votes and comments are removed.')) return;
+        try { await api('DELETE', `/api/super/users/${b.dataset.superDel}`); toast('Subscriber deleted'); renderAdmin(el); }
+        catch (err) { toast(err.message, true); }
+      }));
+    } else {
+      body.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span class="muted">${users.length} user(s) · subscriber management is for the super user</span>
+          <a class="btn btn-primary btn-sm" href="/api/admin/users/export.csv" id="exportUsers" download>⬇ Export CSV (for your CRM)</a>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th></tr></thead>
+          <tbody>
+            ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone || '')}</td><td>${esc(u.role)}</td><td>${fmtDate(u.createdAt)}</td></tr>`).join('')}
+          </tbody>
+        </table>`;
+      const exp = $('#exportUsers');
+      exp.removeAttribute('href');
+      exp.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch('/api/admin/users/export.csv', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+          if (!res.ok) throw new Error('Export failed');
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'beatthread-users.csv';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          toast('Users exported');
+        } catch (err) { toast(err.message, true); }
+      });
+    }
+  } else if (adminTab === 'embed') {
+    const host = location.origin;
+    const code = `<iframe src="${esc(host)}/embed.html?version=REPLACE_WITH_VERSION_ID" style="width:100%;height:280px;border:0;border-radius:12px" loading="lazy"></iframe>`;
     body.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span class="muted">${users.length} user(s)</span>
-        <a class="btn btn-primary btn-sm" href="/api/admin/users/export.csv" id="exportUsers" download>⬇ Export CSV (for your CRM)</a>
-      </div>
-      <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th></tr></thead>
-        <tbody>
-          ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone || '')}</td><td>${esc(u.role)}</td><td>${fmtDate(u.createdAt)}</td></tr>`).join('')}
-        </tbody>
-      </table>`;
-    // CSV export requires the auth header; fetch + download via blob.
-    const exp = $('#exportUsers');
-    exp.removeAttribute('href');
-    exp.addEventListener('click', async (e) => {
-      e.preventDefault();
-      try {
-        const res = await fetch('/api/admin/users/export.csv', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        if (!res.ok) throw new Error('Export failed');
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'beatthread-users.csv';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        toast('Users exported');
-      } catch (err) { toast(err.message, true); }
+      <p class="muted">Drop BeatThread into any existing page — it inherits your branding, theme and menu. Replace <b>REPLACE_WITH_VERSION_ID</b> with a version id (found in a thread URL), then paste this into your site:</p>
+      <div class="embed-code" id="embedCode"></div>
+      <div class="form-actions"><button class="btn btn-primary" id="copyEmbed">Copy snippet</button></div>
+      <p class="muted" style="margin-top:12px">Standalone player page: <a href="/embed.html?version=">${esc(host)}/embed.html?version=…</a></p>`;
+    $('#embedCode').textContent = code;
+    $('#copyEmbed').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(code); toast('Copied'); }
+      catch { toast('Copy manually', true); }
     });
   }
 }

@@ -41,20 +41,23 @@ test('health is public', async () => {
   assert.strictEqual(json.status, 'ok');
 });
 
-test('first registered user becomes admin', async () => {
+test('first registered user becomes super (owner)', async () => {
   const { status, json } = await api('POST', '/api/auth/register', { name: 'Pro', email: 'pro@example.com', password: 'producer123' });
   assert.strictEqual(status, 201);
-  assert.strictEqual(json.user.role, 'admin');
+  assert.strictEqual(json.user.role, 'super');
   adminToken = json.token;
 });
 
-test('public settings expose branding but never the Cloudinary secret', async () => {
+test('public settings expose branding but never secrets; Cloudinary starts unconfigured', async () => {
   const { status, json } = await api('GET', '/api/settings');
   assert.strictEqual(status, 200);
   assert.strictEqual(json.siteName, 'BeatThread');
-  assert.strictEqual(json.cloudinaryConfigured, true);
+  assert.strictEqual(json.cloudinaryConfigured, false);
   assert.strictEqual(json.apiSecret, undefined);
   assert.strictEqual(json.cloudinary, undefined);
+  assert.strictEqual(json.jwtSecret, undefined);
+  assert.strictEqual(json.plan.id, 'starter');
+  assert.deepStrictEqual(json.menu, []);
 });
 
 test('second user registers as regular user', async () => {
@@ -68,15 +71,24 @@ test('posting requires auth', async () => {
   assert.strictEqual(status, 401);
 });
 
-test('upload/sign returns valid Cloudinary params (signature checkable)', async () => {
+test('admin configures Cloudinary; upload/sign returns valid params (signature checkable)', async () => {
+  // Configure storage with test credentials (nothing is hardcoded anymore).
+  const cfg = await api('PUT', '/api/admin/settings', {
+    cloudinary: { cloudName: 'testcloud', apiKey: 'testkey', apiSecret: 'testsecret' },
+  }, adminToken);
+  assert.strictEqual(cfg.status, 200);
+  assert.strictEqual(cfg.json.cloudinary.cloudName, 'testcloud');
+  const pub = await api('GET', '/api/settings');
+  assert.strictEqual(pub.json.cloudinaryConfigured, true);
+  assert.strictEqual(pub.json.apiSecret, undefined);
+
   const { status, json } = await api('GET', '/api/beats/upload/sign', null, adminToken);
   assert.strictEqual(status, 200);
-  assert.strictEqual(json.cloudName, 'r6natkse');
+  assert.strictEqual(json.cloudName, 'testcloud');
   assert.ok(json.apiKey && json.timestamp && json.signature);
-  // Recompute the signature from the public params + known secret.
-  // (resource_type is part of the upload URL and is NOT signed.)
+  // Recompute the signature from the public params + the configured secret.
   const params = { timestamp: json.timestamp, folder: json.folder };
-  const toSign = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join('&') + 'UJh4kBlNk8OD3M34kAi9U216I6Y';
+  const toSign = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join('&') + 'testsecret';
   assert.strictEqual(json.signature, crypto.createHash('sha1').update(toSign).digest('hex'));
 });
 

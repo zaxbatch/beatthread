@@ -1,10 +1,11 @@
 'use strict';
 
 const express = require('express');
-const { requireAuth } = require('../auth');
+const { requireAuth, optionalAuth, isAdminLike } = require('../auth');
 const { validateBeat, validateVersion } = require('../validators');
 const { getSettings } = require('../settings');
 const { signUpload } = require('../cloudinary');
+const { getPlan, limit } = require('../plans');
 
 /**
  * Beats, versions and votes.
@@ -15,7 +16,17 @@ const { signUpload } = require('../cloudinary');
  *   POST /api/beats                     — auth: create beat + original version
  *   POST /api/beats/:id/versions        — auth: add a cover version
  *   POST /api/versions/:id/vote         — auth: { value: 1 | -1 } (same vote = remove)
+ *   GET  /api/versions/:id/download     — public: stream the audio as an attachment
  */
+
+/** Plan-limit guard; only the super user (owner) bypasses limits. */
+function planError(db, req, key) {
+  if (req.user && req.user.role === 'super') return null;
+  const s = getSettings(db);
+  const n = limit(s, key);
+  if (!Number.isFinite(n)) return null;
+  return { status: 403, json: { error: `Your ${getPlan(s).name} plan allows ${n} of these — upgrade to Pro for more`, code: 'PLAN_LIMIT' } };
+}
 
 function netVotes(db, version) {
   return db.all('votes').filter((v) => v.versionId === version.id).reduce((s, v) => s + (v.value || 0), 0);
@@ -77,8 +88,12 @@ function beatsRouter(db) {
   // Auth: create a beat with the original version.
   router.post('/', requireAuth(db), (req, res) => {
     const settings = getSettings(db);
-    if (settings.mode === 'solo' && req.user.role !== 'admin') {
+    if (settings.mode === 'solo' && !isAdminLike(req.user)) {
       return res.status(403).json({ error: 'This site is in solo mode — only the owner posts beats' });
+    }
+    const blocked = planError(db, req, 'beats');
+    if (blocked && db.all('beats').length >= limit(settings, 'beats')) {
+      return res.status(blocked.status).json(blocked.json);
     }
     const errors = validateBeat(req.body || {});
     if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -120,8 +135,13 @@ function beatsRouter(db) {
     const beat = db.get('beats', req.params.id);
     if (!beat || beat.status === 'hidden') return res.status(404).json({ error: 'Beat not found' });
     const settings = getSettings(db);
-    if (settings.mode === 'solo' && req.user.role !== 'admin') {
+    if (settings.mode === 'solo' && !isAdminLike(req.user)) {
       return res.status(403).json({ error: 'This site is in solo mode — only the owner posts' });
+    }
+    const versions = db.all('versions').filter((v) => v.beatId === beat.id);
+    const blocked = planError(db, req, 'versionsPerBeat');
+    if (blocked && versions.length >= limit(settings, 'versionsPerBeat')) {
+      return res.status(blocked.status).json(blocked.json);
     }
     const errors = validateVersion(req.body || {});
     if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
@@ -154,6 +174,57 @@ function beatsRouter(db) {
       myVote = value;
     }
     res.json({ netVotes: netVotes(db, version), myVote });
+  });
+
+  // Public: a single version (for the embeddable player).
+  router.get('/versions/:id', (req, res) => {
+    const version = db.get('versions', req.params.id);
+    if (!version || version.status === 'hidden') return res.status(404).json({ error: 'Version not found' });
+    const beat = db.get('beats', version.beatId);
+    res.json({
+      id: version.id,
+      title: version.title,
+      audioUrl: version.audioUrl,
+      coverUrl: version.coverUrl || '',
+      isOriginal: Boolean(version.isOriginal),
+      producerName: producerName(db, version.producerId),
+      beatId: version.beatId,
+      beatTitle: beat ? beat.title : '',
+      netVotes: netVotes(db, version),
+    });
+  });
+
+  // Public: stream a version's audio as a download attachment. The owner
+  // (admin/super) can always download; otherwise the plan gates it (Pro+).
+  router.get('/versions/:id/download', optionalAuth(db), async (req, res) => {
+    const version = db.get('versions', req.params.id);
+    if (!version || version.status === 'hidden') return res.status(404).json({ error: 'Version not found' });
+    const settings = getSettings(db);
+    const allowed = limit(settings, 'download') || (req.user && req.user.role === 'super');
+    if (!allowed) {
+      return res.status(403).json({ error: 'Downloads are a Pro feature — upgrade to download', code: 'PLAN_LIMIT' });
+    }
+    const url = String(version.audioUrl || '').trim();
+    if (!url) return res.status(400).json({ error: 'This version has no audio file' });
+
+    let upstream;
+    try {
+      upstream = await fetch(url);
+    } catch {
+      return res.status(502).json({ error: 'Could not reach the audio host' });
+    }
+    if (!upstream.ok) return res.status(502).json({ error: 'Audio host returned an error' });
+
+    const safeName = (String(version.title || 'version').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'audio') + '.mp3';
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    try {
+      for await (const chunk of upstream.body) res.write(chunk);
+      res.end();
+    } catch {
+      res.end();
+    }
   });
 
   return router;

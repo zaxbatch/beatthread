@@ -3,6 +3,8 @@
 const crypto = require('crypto');
 const express = require('express');
 const { validatePassword } = require('./validators');
+const { getSettings } = require('./settings');
+const { verifyJwt } = require('./jwt');
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -64,6 +66,38 @@ function requireAuth(db) {
   };
 }
 
+/**
+ * Optional auth: attaches req.user when a valid token is present, but never
+ * blocks the request (for public routes that want owner bypasses, e.g. the
+ * audio download proxy).
+ */
+function optionalAuth(db) {
+  return (req, res, next) => {
+    const token = bearerToken(req);
+    const session = token
+      ? db.all('sessions').find((s) => s.token === token && new Date(s.expiresAt) > new Date())
+      : null;
+    const user = session ? db.get('users', session.userId) : null;
+    if (user) { req.userId = user.id; req.user = user; }
+    next();
+  };
+}
+
+/**
+ * Role gate: super > admin > user. requireRole(['admin','super']) lets any
+ * staff role through; requireRole(['super']) is owner-only.
+ */
+function requireRole(db, allowed) {
+  return [requireAuth(db), (req, res, next) => {
+    if (!allowed.includes(req.user.role)) {
+      return res.status(403).json({ error: 'You do not have permission to do that' });
+    }
+    next();
+  }];
+}
+
+const isAdminLike = (user) => user && (user.role === 'admin' || user.role === 'super');
+
 // ---- Routes ---------------------------------------------------------------
 
 function authRouter(db) {
@@ -84,8 +118,9 @@ function authRouter(db) {
     if (errors.length) return res.status(400).json({ error: 'Validation failed', details: errors });
 
     const { salt, hash } = hashPassword(password);
-    // The very first account becomes the admin (plug-and-play onboarding).
-    const role = db.all('users').length === 0 ? 'admin' : 'user';
+    // The very first account becomes the SUPER user (owner). They manage
+    // admins and subscribers from the admin panel.
+    const role = db.all('users').length === 0 ? 'super' : 'user';
     const user = db.insert('users', {
       name: String(name || '').trim(),
       email: email.trim().toLowerCase(),
@@ -121,6 +156,20 @@ function authRouter(db) {
     const session = token ? db.all('sessions').find((s) => s.token === token) : null;
     if (session) db.remove('sessions', session.id);
     res.status(204).end();
+  });
+
+  // POST /api/auth/jwt — consistent login via a JWT signed with the admin's
+  // shared secret (configured in Settings → Login). The token's `sub` must be
+  // the email of an existing account; that account gets a session.
+  router.post('/jwt', (req, res) => {
+    const secret = getSettings(db).jwtSecret;
+    if (!secret) return res.status(400).json({ error: 'JWT login is not configured' });
+    const payload = verifyJwt(String((req.body || {}).token || ''), secret);
+    if (!payload) return res.status(401).json({ error: 'Invalid or expired token' });
+    const user = db.all('users').find((u) => u.email.toLowerCase() === String(payload.sub || '').toLowerCase());
+    if (!user) return res.status(401).json({ error: 'No account matches this token' });
+    const token = createSession(db, user.id);
+    res.json({ token, user: publicUser(user) });
   });
 
   // POST /api/auth/forgot — request a password reset.
@@ -165,4 +214,4 @@ function authRouter(db) {
   return router;
 }
 
-module.exports = { authRouter, requireAuth };
+module.exports = { authRouter, requireAuth, optionalAuth, requireRole, isAdminLike };
