@@ -81,24 +81,34 @@ function adminRouter(db) {
       patch.theme = { name, css };
     }
 
-    // Cloudinary storage.
+    // Cloudinary storage — part of the install owner's setup. Blank fields
+    // keep the existing value (so saved secrets are never re-displayed);
+    // { cloudinary: { clear: true } } wipes the credentials.
     if (body.cloudinary && typeof body.cloudinary === 'object') {
       const c = { ...(s.cloudinary || {}) };
-      if (body.cloudinary.cloudName !== undefined) c.cloudName = String(body.cloudinary.cloudName).trim();
-      if (body.cloudinary.apiKey !== undefined) c.apiKey = String(body.cloudinary.apiKey).trim();
-      if (body.cloudinary.apiSecret !== undefined) c.apiSecret = String(body.cloudinary.apiSecret).trim();
+      if (body.cloudinary.clear) {
+        c.cloudName = '';
+        c.apiKey = '';
+        c.apiSecret = '';
+      } else {
+        if (String(body.cloudinary.cloudName || '').trim()) c.cloudName = String(body.cloudinary.cloudName).trim();
+        if (String(body.cloudinary.apiKey || '').trim()) c.apiKey = String(body.cloudinary.apiKey).trim();
+        if (String(body.cloudinary.apiSecret || '').trim()) c.apiSecret = String(body.cloudinary.apiSecret).trim();
+      }
       patch.cloudinary = c;
     }
 
-    // Plan + JWT secret: super only.
+    // Plan changes are super-only (the owner of the SaaS controls billing).
     if (body.plan !== undefined) {
       if (!isSuper) return res.status(403).json({ error: 'Only the super user can change the plan' });
       if (!PLAN_IDS.includes(String(body.plan))) return res.status(400).json({ error: `Unknown plan "${body.plan}"` });
       patch.plan = String(body.plan);
     }
-    if (body.jwtSecret !== undefined) {
-      if (!isSuper) return res.status(403).json({ error: 'Only the super user can configure JWT login' });
-      patch.jwtSecret = String(body.jwtSecret || '').trim();
+
+    // JWT secret — the install owner's own auth, configured at setup by any
+    // staff admin (not a super-user privilege). Empty string disables JWT.
+    if (body.jwtSecret !== undefined && typeof body.jwtSecret === 'string') {
+      patch.jwtSecret = body.jwtSecret.trim();
     }
 
     db.update('settings', s.id, patch);

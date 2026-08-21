@@ -575,10 +575,19 @@ async function renderAdmin(el) {
   const adminData = await api('GET', '/api/admin/settings');
   const isSuper = currentUser.role === 'super';
   const plan = adminData.plan || { id: 'starter', name: 'Starter' };
+  const setup = [
+    { label: 'Branding', done: Boolean((adminData.siteName && adminData.siteName !== 'BeatThread') || adminData.logoUrl || (adminData.primaryColor && adminData.primaryColor !== '#f59e0b')), tab: 'branding' },
+    { label: 'Storage (Cloudinary)', done: Boolean(adminData.cloudinary && adminData.cloudinary.cloudName && adminData.cloudinary.apiKey && adminData.cloudinary.apiSecret), tab: 'storage' },
+    { label: 'JWT login', done: Boolean(adminData.jwtSecret), tab: 'login' },
+    { label: 'Plan', done: ((adminData.plan && adminData.plan.id) || 'starter') !== 'starter', tab: 'plans' },
+  ];
   el.innerHTML = `
     <div class="panel">
       <div class="panel-head"><h2>Admin panel</h2></div>
       <div style="padding:16px 18px">
+        <div class="setup-strip" title="Your setup checklist — click a step to open it">
+          ${setup.map((s) => `<button class="setup-chip ${s.done ? 'done' : 'todo'}" data-setup-tab="${s.tab}">${s.done ? '✓' : '○'} ${s.label}</button>`).join('')}
+        </div>
         <div class="tabs">
           ${ADMIN_TABS.map(([id, label]) => `<button class="tab-btn ${adminTab === id ? 'active' : ''}" data-tab="${id}">${label}</button>`).join('')}
         </div>
@@ -587,6 +596,7 @@ async function renderAdmin(el) {
     </div>`;
 
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { adminTab = b.dataset.tab; renderAdmin(el); }));
+  el.querySelectorAll('[data-setup-tab]').forEach((b) => b.addEventListener('click', () => { adminTab = b.dataset.setupTab; renderAdmin(el); }));
   const body = $('#adminBody');
 
   const save = async (patch) => {
@@ -700,35 +710,61 @@ async function renderAdmin(el) {
     });
   } else if (adminTab === 'storage') {
     const c = adminData.cloudinary || {};
+    const configured = Boolean(c.cloudName && c.apiKey && c.apiSecret);
     body.innerHTML = `
-      <p class="muted">Sign-ups upload audio directly to your Cloudinary account. Enter your Cloudinary credentials (Dashboard → API Keys) at setup — nothing is hardcoded.</p>
+      <p class="muted">Audio uploads go straight to <b>your</b> Cloudinary account (Dashboard → API Keys). Configured at setup — saved secrets are never shown or re-displayed.</p>
       <div class="form-grid">
-        <div><label>Cloud name</label><input id="cCloud" value="${esc(c.cloudName || '')}" /></div>
-        <div><label>API key</label><input id="cKey" value="${esc(c.apiKey || '')}" /></div>
-        <div class="full"><label>API secret</label><input id="cSecret" type="password" value="${esc(c.apiSecret || '')}" /></div>
+        <div><label>Cloud name</label><input id="cCloud" placeholder="${c.cloudName ? '•••••••• (saved — leave blank to keep)' : 'e.g. mycloud'}" autocomplete="off" /></div>
+        <div><label>API key</label><input id="cKey" placeholder="${c.apiKey ? '•••••••• (saved — leave blank to keep)' : 'Your API key'}" autocomplete="off" /></div>
+        <div class="full"><label>API secret</label><input id="cSecret" type="password" placeholder="${c.apiSecret ? '•••••••• (saved — leave blank to keep)' : 'Your API secret'}" autocomplete="new-password" /></div>
       </div>
-      <div class="form-actions"><button class="btn btn-primary" id="saveStorage">Save storage settings</button></div>`;
-    $('#saveStorage').addEventListener('click', () => save({
-      cloudinary: { cloudName: $('#cCloud').value.trim(), apiKey: $('#cKey').value.trim(), apiSecret: $('#cSecret').value.trim() },
-    }));
+      <div class="form-actions">
+        <button class="btn btn-primary" id="saveStorage">Save storage settings</button>
+        ${configured ? '<button class="btn btn-danger" id="clearStorage">Clear credentials</button>' : ''}
+      </div>`;
+    $('#saveStorage').addEventListener('click', async () => {
+      const payload = { cloudinary: {} };
+      const v = (id) => $(id).value.trim();
+      if (v('#cCloud')) payload.cloudinary.cloudName = v('#cCloud');
+      if (v('#cKey')) payload.cloudinary.apiKey = v('#cKey');
+      if (v('#cSecret')) payload.cloudinary.apiSecret = v('#cSecret');
+      if (!Object.keys(payload.cloudinary).length) { toast('Type a value to change it — blanks keep the saved credentials', true); return; }
+      await api('PUT', '/api/admin/settings', payload);
+      toast('Storage settings saved');
+      renderAdmin(el);
+    });
+    const clearStorage = $('#clearStorage');
+    if (clearStorage) clearStorage.addEventListener('click', async () => {
+      if (!confirm('Clear Cloudinary credentials? Uploads will stop until you reconfigure.')) return;
+      await api('PUT', '/api/admin/settings', { cloudinary: { clear: true } });
+      toast('Credentials cleared');
+      renderAdmin(el);
+    });
   } else if (adminTab === 'login') {
-    if (!isSuper) {
-      body.innerHTML = '<div class="empty">Only the super user can configure JWT login.</div>';
-    } else {
-      body.innerHTML = `
-        <p class="muted">Set a shared secret so visitors to <b>your own website</b> can log in consistently with a JWT (HS256, <code>sub</code> = the user's email). They then call:</p>
-        <div class="embed-code">POST /api/auth/jwt&#10;{"token":"&lt;your HS256 JWT&gt;"}</div>
-        <div class="form-grid">
-          <div class="full"><label>JWT secret</label><input id="jwtSecret" type="password" value="${esc(adminData.jwtSecret || '')}" placeholder="A long random string" /></div>
-        </div>
-        <div class="form-actions"><button class="btn btn-primary" id="saveJwt">Save secret</button></div>
-        <p class="muted" style="margin-top:10px">JWT login is a <b>Business</b> plan feature — the endpoint returns 400 when the secret is empty.</p>`;
-      $('#saveJwt').addEventListener('click', async () => {
-        await api('PUT', '/api/admin/settings', { jwtSecret: $('#jwtSecret').value.trim() });
-        toast('JWT secret saved');
-        renderAdmin(el);
-      });
-    }
+    body.innerHTML = `
+      <p class="muted">This is <b>your own auth</b> for embedded logins. Set a shared secret, then visitors to your website present a JWT (HS256, <code>sub</code> = the user's email) to log in consistently:</p>
+      <div class="embed-code">POST /api/auth/jwt&#10;{"token":"&lt;your HS256 JWT&gt;"}</div>
+      <div class="form-grid">
+        <div class="full"><label>JWT secret</label><input id="jwtSecret" type="password" placeholder="${adminData.jwtSecret ? '•••••••• (saved — leave blank to keep)' : 'A long random string'}" autocomplete="new-password" /></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" id="saveJwt">Save secret</button>
+        ${adminData.jwtSecret ? '<button class="btn btn-danger" id="clearJwt">Remove (disable JWT)</button>' : ''}
+      </div>`;
+    $('#saveJwt').addEventListener('click', async () => {
+      const v = $('#jwtSecret').value.trim();
+      if (!v) { toast('Type a new secret to change it — blank keeps the saved one', true); return; }
+      await api('PUT', '/api/admin/settings', { jwtSecret: v });
+      toast('JWT secret saved');
+      renderAdmin(el);
+    });
+    const clearJwt = $('#clearJwt');
+    if (clearJwt) clearJwt.addEventListener('click', async () => {
+      if (!confirm('Disable JWT login?')) return;
+      await api('PUT', '/api/admin/settings', { jwtSecret: '' });
+      toast('JWT login disabled');
+      renderAdmin(el);
+    });
   } else if (adminTab === 'plans') {
     const plans = await api('GET', '/api/admin/plans');
     const currentPlan = plan.id || 'starter';

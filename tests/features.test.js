@@ -132,7 +132,8 @@ test('themes: built-ins always available; custom CSS is Pro-only', async () => {
 
 test('JWT login: configured by super, verifies HS256, maps to account email', async () => {
   const secret = 'shh-secret';
-  const cfg = await api('PUT', '/api/admin/settings', { jwtSecret: secret }, superToken);
+  // Any staff admin configures the install's own JWT (not super-only).
+  const cfg = await api('PUT', '/api/admin/settings', { jwtSecret: secret }, adminStaffToken);
   assert.strictEqual(cfg.status, 200);
 
   // Valid token for the fan account.

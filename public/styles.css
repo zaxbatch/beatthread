@@ -197,3 +197,10 @@ tr:hover td { background: var(--panel-2); }
 
 /* Embed code */
 .embed-code { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+
+/* Setup checklist (owner onboarding) */
+.setup-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.setup-chip { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.setup-chip.done { color: var(--ok); border-color: rgba(34, 197, 94, 0.45); }
+.setup-chip.todo { color: var(--danger); border-color: rgba(239, 68, 68, 0.45); }
+.setup-chip:hover { filter: brightness(1.15); }

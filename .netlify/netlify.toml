@@ -1,13 +1,13 @@
-functionsDirectory = "/home/zax/Apps/agent-company-ai/beatthread/netlify/functions"
+functionsDirectory = "/home/zax/Apps/Biz/z-dot-team/beatthread/netlify/functions"
 functionsDirectoryOrigin = "config-v1"
 headersOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
 
 [build]
-publish = "/home/zax/Apps/agent-company-ai/beatthread/public"
+publish = "/home/zax/Apps/Biz/z-dot-team/beatthread/public"
 publishOrigin = "config"
-functions = "/home/zax/Apps/agent-company-ai/beatthread/netlify/functions"
+functions = "/home/zax/Apps/Biz/z-dot-team/beatthread/netlify/functions"
 
 [build.environment]
 
